@@ -19,6 +19,19 @@
 
 部署完成后，直接访问 Worker URL 即可进入管理界面，使用你设置的 TOKEN 登录。
 
+### 通过 Workers Builds（CI/CD）部署
+
+如果你已经 fork 或拥有本仓库，也可以在 Cloudflare Dashboard 中通过 **Workers & Pages → Import from Git** 连接 GitHub 仓库部署。
+
+需要在 Workers Builds 的 **Settings → Environment variables** 中添加：
+
+| 变量名 | 说明 |
+|--------|------|
+| `KV_NAMESPACE_ID` | 你的 KV 命名空间 ID（在 Dashboard → KV 中查看或新建） |
+| `TOKEN` | 访问令牌 |
+
+deploy 脚本会自动将 KV ID 写入配置，无需手动修改 `wrangler.toml`。
+
 ## 运行截图
 ![1.png](./img/1.png)
 ![2.png](./img/2.png)
