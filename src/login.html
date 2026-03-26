@@ -33,31 +33,6 @@
         .login-header {
             text-align: center;
             margin-bottom: 30px;
-            position: relative;
-        }
-
-        .login-header-nav {
-            position: absolute;
-            top: 0;
-            right: 0;
-        }
-
-        .login-header-nav a {
-            color: #667eea;
-            font-size: 14px;
-            text-decoration: none;
-            font-weight: 500;
-        }
-
-        .login-header-nav a:hover {
-            text-decoration: underline;
-        }
-
-        @media (max-width: 480px) {
-            .login-header-nav {
-                position: static;
-                margin-bottom: 12px;
-            }
         }
 
         .login-header h1 {
@@ -97,17 +72,28 @@
             border-color: #667eea;
         }
 
-        .btn-login {
-            width: 100%;
+        .login-actions {
+            display: flex;
+            gap: 12px;
+            align-items: stretch;
+        }
+
+        .login-actions .btn-login,
+        .login-actions .btn-view-sub {
+            flex: 1;
+            min-width: 0;
             padding: 12px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
             border-radius: 8px;
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+        }
+
+        .btn-login {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
         }
 
         .btn-login:hover {
@@ -116,6 +102,21 @@
         }
 
         .btn-login:active {
+            transform: translateY(0);
+        }
+
+        .btn-view-sub {
+            background: white;
+            color: #5c6bc0;
+            border: 2px solid #c5cae9;
+        }
+
+        .btn-view-sub:hover {
+            background: #e8eaf6;
+            transform: translateY(-2px);
+        }
+
+        .btn-view-sub:active {
             transform: translateY(0);
         }
 
@@ -132,19 +133,31 @@
         .error-message.show {
             display: block;
         }
+
+        .hint-message {
+            background: #e3f2fd;
+            color: #1565c0;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .hint-message.show {
+            display: block;
+        }
     </style>
 </head>
 <body>
     <div class="login-container">
         <div class="login-header">
-            <div class="login-header-nav">
-                <a href="/admin">管理后台</a>
-            </div>
             <h1>🔐 管理后台</h1>
             <p>Clash 订阅合并工具</p>
         </div>
 
         <div id="errorMessage" class="error-message"></div>
+        <div id="hintMessage" class="hint-message"></div>
 
         <form id="loginForm">
             <div class="form-group">
@@ -152,13 +165,29 @@
                 <input type="password" id="token" name="token" placeholder="请输入访问令牌" required>
             </div>
 
-            <button type="submit" class="btn-login">登录</button>
+            <div class="login-actions">
+                <button type="submit" class="btn-login">登录</button>
+                <button type="button" class="btn-view-sub" id="btnViewSub">查看订阅</button>
+            </div>
         </form>
     </div>
 
     <script>
         const loginForm = document.getElementById('loginForm');
         const errorMessage = document.getElementById('errorMessage');
+        const hintMessage = document.getElementById('hintMessage');
+        const tokenInput = document.getElementById('token');
+
+        document.getElementById('btnViewSub').addEventListener('click', () => {
+            const token = tokenInput.value.trim();
+            if (!token) {
+                showHint('请先输入访问令牌 (TOKEN)');
+                tokenInput.focus();
+                return;
+            }
+            const url = `${window.location.origin}/subs/${encodeURIComponent(token)}`;
+            window.open(url, '_blank', 'noopener,noreferrer');
+        });
 
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -195,6 +224,14 @@
             setTimeout(() => {
                 errorMessage.classList.remove('show');
             }, 3000);
+        }
+
+        function showHint(message) {
+            hintMessage.textContent = message;
+            hintMessage.classList.add('show');
+            setTimeout(() => {
+                hintMessage.classList.remove('show');
+            }, 4000);
         }
     </script>
 </body>

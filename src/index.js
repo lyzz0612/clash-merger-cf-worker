@@ -3,6 +3,7 @@ import { ProxyProvider } from './proxy-provider.js';
 import { ClashMerger } from './clash-merger.js';
 import { BASE_CONFIG } from './base-config.js';
 import { Logger } from './logger.js';
+import { parseProxyUri } from './proxy-uri-parser.js';
 import loginHtml from './login.html';
 import adminHtml from './admin.html';
 
@@ -157,6 +158,28 @@ async function handleUpdateCustomProxies(request, env, kv, logger) {
 }
 
 /**
+ * 将分享链接解析为 Clash 代理对象（供管理页使用）
+ */
+async function handleParseProxyUri(request, env, kv, logger) {
+  const isAuthed = await verifyAuth(request, env, kv);
+  if (!isAuthed) {
+    logger.warn('解析代理链接失败：未授权');
+    return jsonResponse({ error: '未授权' }, 401);
+  }
+
+  try {
+    const body = await request.json();
+    const { uri } = body;
+    const proxy = parseProxyUri(uri);
+    logger.info('解析代理链接成功', { type: proxy.type });
+    return jsonResponse({ proxy });
+  } catch (err) {
+    logger.warn('解析代理链接失败', { message: err.message });
+    return jsonResponse({ error: err.message || '解析失败' }, 400);
+  }
+}
+
+/**
  * 处理订阅请求
  */
 async function handleSubscription(token, env, kv, logger) {
@@ -252,6 +275,10 @@ export default {
       // 路由: 更新自定义代理列表 API
       else if (path === '/api/custom-proxies' && method === 'PUT') {
         response = await handleUpdateCustomProxies(request, env, env.CLASH_KV, logger);
+      }
+      // 路由: 解析代理分享链接
+      else if (path === '/api/parse-proxy-uri' && method === 'POST') {
+        response = await handleParseProxyUri(request, env, env.CLASH_KV, logger);
       }
       // 路由: /subs/<token>
       else {
