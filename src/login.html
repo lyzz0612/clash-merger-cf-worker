@@ -33,6 +33,31 @@
         .login-header {
             text-align: center;
             margin-bottom: 30px;
+            position: relative;
+        }
+
+        .login-header-nav {
+            position: absolute;
+            top: 0;
+            right: 0;
+        }
+
+        .login-header-nav a {
+            color: #667eea;
+            font-size: 14px;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .login-header-nav a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 480px) {
+            .login-header-nav {
+                position: static;
+                margin-bottom: 12px;
+            }
         }
 
         .login-header h1 {
@@ -112,6 +137,9 @@
 <body>
     <div class="login-container">
         <div class="login-header">
+            <div class="login-header-nav">
+                <a href="/admin">管理后台</a>
+            </div>
             <h1>🔐 管理后台</h1>
             <p>Clash 订阅合并工具</p>
         </div>

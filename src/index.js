@@ -260,9 +260,12 @@ export default {
           const token = match[1];
           const yamlContent = await handleSubscription(token, env, env.CLASH_KV, logger);
 
+          // text/plain + inline：浏览器直接展示原始 YAML，避免被当作附件下载
           response = new Response(yamlContent, {
             headers: {
-              'Content-Type': 'application/x-yaml; charset=utf-8',
+              'Content-Type': 'text/plain; charset=utf-8',
+              'Content-Disposition': 'inline',
+              'Cache-Control': 'no-store',
             },
           });
         } else {
