@@ -7,10 +7,20 @@ import loginHtml from './login.html';
 import adminHtml from './admin.html';
 
 /**
+ * 获取有效 Token：优先从环境变量读取，回退到 KV
+ */
+async function getValidToken(env, kv) {
+  if (env.TOKEN) {
+    return env.TOKEN;
+  }
+  return await kv.get('TOKEN');
+}
+
+/**
  * Token 验证
  */
-async function tokenCheck(token, kv) {
-  const validToken = await kv.get('TOKEN');
+async function tokenCheck(token, env, kv) {
+  const validToken = await getValidToken(env, kv);
   if (!validToken || token !== validToken) {
     throw new Error('Invalid token');
   }
@@ -19,13 +29,13 @@ async function tokenCheck(token, kv) {
 /**
  * 验证请求中的 Authorization 头
  */
-async function verifyAuth(request, kv) {
+async function verifyAuth(request, env, kv) {
   const authToken = request.headers.get('Authorization');
   if (!authToken) {
     return false;
   }
 
-  const validToken = await kv.get('TOKEN');
+  const validToken = await getValidToken(env, kv);
   return authToken === validToken;
 }
 
@@ -56,13 +66,13 @@ function htmlResponse(html, status = 200) {
 /**
  * 处理登录请求
  */
-async function handleLogin(request, kv, logger) {
+async function handleLogin(request, env, kv, logger) {
   const body = await request.json();
   const { token } = body;
 
   logger.info('登录请求', { token_length: token?.length });
 
-  const validToken = await kv.get('TOKEN');
+  const validToken = await getValidToken(env, kv);
   if (token === validToken) {
     logger.info('登录成功');
     return jsonResponse({ success: true, message: '登录成功' });
@@ -75,8 +85,8 @@ async function handleLogin(request, kv, logger) {
 /**
  * 处理获取订阅列表请求
  */
-async function handleGetSubs(request, kv, logger) {
-  const isAuthed = await verifyAuth(request, kv);
+async function handleGetSubs(request, env, kv, logger) {
+  const isAuthed = await verifyAuth(request, env, kv);
   if (!isAuthed) {
     logger.warn('获取订阅列表失败：未授权');
     return jsonResponse({ error: '未授权' }, 401);
@@ -92,8 +102,8 @@ async function handleGetSubs(request, kv, logger) {
 /**
  * 处理更新订阅列表请求
  */
-async function handleUpdateSubs(request, kv, logger) {
-  const isAuthed = await verifyAuth(request, kv);
+async function handleUpdateSubs(request, env, kv, logger) {
+  const isAuthed = await verifyAuth(request, env, kv);
   if (!isAuthed) {
     logger.warn('更新订阅列表失败：未授权');
     return jsonResponse({ error: '未授权' }, 401);
@@ -112,8 +122,8 @@ async function handleUpdateSubs(request, kv, logger) {
 /**
  * 处理获取自定义代理列表请求
  */
-async function handleGetCustomProxies(request, kv, logger) {
-  const isAuthed = await verifyAuth(request, kv);
+async function handleGetCustomProxies(request, env, kv, logger) {
+  const isAuthed = await verifyAuth(request, env, kv);
   if (!isAuthed) {
     logger.warn('获取自定义代理列表失败：未授权');
     return jsonResponse({ error: '未授权' }, 401);
@@ -129,8 +139,8 @@ async function handleGetCustomProxies(request, kv, logger) {
 /**
  * 处理更新自定义代理列表请求
  */
-async function handleUpdateCustomProxies(request, kv, logger) {
-  const isAuthed = await verifyAuth(request, kv);
+async function handleUpdateCustomProxies(request, env, kv, logger) {
+  const isAuthed = await verifyAuth(request, env, kv);
   if (!isAuthed) {
     logger.warn('更新自定义代理列表失败：未授权');
     return jsonResponse({ error: '未授权' }, 401);
@@ -149,10 +159,9 @@ async function handleUpdateCustomProxies(request, kv, logger) {
 /**
  * 处理订阅请求
  */
-async function handleSubscription(token, kv, logger) {
-  // 验证 token
+async function handleSubscription(token, env, kv, logger) {
   logger.info('订阅请求', { token_prefix: token.substring(0, 8) + '...' });
-  await tokenCheck(token, kv);
+  await tokenCheck(token, env, kv);
 
   // 加载配置
   const configLoader = new ConfigLoader(kv);
@@ -226,30 +235,30 @@ export default {
       }
       // 路由: 登录 API
       else if (path === '/api/login' && method === 'POST') {
-        response = await handleLogin(request, env.CLASH_KV, logger);
+        response = await handleLogin(request, env, env.CLASH_KV, logger);
       }
       // 路由: 获取订阅列表 API
       else if (path === '/api/subs' && method === 'GET') {
-        response = await handleGetSubs(request, env.CLASH_KV, logger);
+        response = await handleGetSubs(request, env, env.CLASH_KV, logger);
       }
       // 路由: 更新订阅列表 API
       else if (path === '/api/subs' && method === 'PUT') {
-        response = await handleUpdateSubs(request, env.CLASH_KV, logger);
+        response = await handleUpdateSubs(request, env, env.CLASH_KV, logger);
       }
       // 路由: 获取自定义代理列表 API
       else if (path === '/api/custom-proxies' && method === 'GET') {
-        response = await handleGetCustomProxies(request, env.CLASH_KV, logger);
+        response = await handleGetCustomProxies(request, env, env.CLASH_KV, logger);
       }
       // 路由: 更新自定义代理列表 API
       else if (path === '/api/custom-proxies' && method === 'PUT') {
-        response = await handleUpdateCustomProxies(request, env.CLASH_KV, logger);
+        response = await handleUpdateCustomProxies(request, env, env.CLASH_KV, logger);
       }
       // 路由: /subs/<token>
       else {
         const match = path.match(/^\/subs\/([^\/]+)$/);
         if (match) {
           const token = match[1];
-          const yamlContent = await handleSubscription(token, env.CLASH_KV, logger);
+          const yamlContent = await handleSubscription(token, env, env.CLASH_KV, logger);
 
           response = new Response(yamlContent, {
             headers: {

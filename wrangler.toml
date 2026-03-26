@@ -2,15 +2,12 @@ name = "clash-merger-cf-worker"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
 
-# KV 命名空间绑定
 [[kv_namespaces]]
 binding = "CLASH_KV"
-id = "xxx"
-preview_id = "xxx"
+id = "placeholder-kv-id"
 
-# 环境变量（可选）
 [vars]
-# 可以在这里设置默认变量
+# TOKEN = "your-secret-token"
 
 [observability]
 [observability.logs]

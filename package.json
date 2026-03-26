@@ -16,6 +16,16 @@
   ],
   "author": "",
   "license": "MIT",
+  "cloudflare": {
+    "bindings": {
+      "CLASH_KV": {
+        "description": "用于存储订阅列表、自定义代理和 Token 的 KV 命名空间，**自动创建**"
+      },
+      "TOKEN": {
+        "description": "访问令牌，用于订阅接口鉴权和管理界面登录，建议使用 `openssl rand -hex 16` 生成"
+      }
+    }
+  },
   "devDependencies": {
     "wrangler": "^4.63.0"
   },
