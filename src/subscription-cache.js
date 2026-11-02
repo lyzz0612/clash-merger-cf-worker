@@ -52,7 +52,12 @@ async function buildSubscription(kv, logger) {
     if (oldStats[sub.url]) stats[sub.url] = oldStats[sub.url];
   }
   for (const provider of providers) {
-    stats[provider.url] = { count: provider.getProxies().length, ok: provider.ok, updatedAt };
+    stats[provider.url] = {
+      count: provider.getProxies().length,
+      ok: provider.ok,
+      ...(provider.error && { error: provider.error }),
+      updatedAt,
+    };
   }
 
   return { yaml: merger.dump(), sources: enabledSubs.length, succeeded, stats };

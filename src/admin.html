@@ -196,6 +196,13 @@
             white-space: nowrap;
         }
 
+        .sub-item-error {
+            margin-top: 8px;
+            color: #c62828;
+            font-size: 13px;
+            word-break: break-all;
+        }
+
         .badge-error {
             background: #ffebee;
             color: #c62828;
@@ -715,6 +722,7 @@
                         </div>
                     </div>
                     <div class="sub-item-url">${escapeHtml(sub.url)}</div>
+                    ${subStats[sub.url]?.error ? `<div class="sub-item-error">失败原因：${escapeHtml(subStats[sub.url].error)}</div>` : ''}
                 </div>
             `;
             }).join('');
@@ -727,7 +735,7 @@
                 return '<span class="badge">节点数未知</span>';
             }
             const title = stat.updatedAt ? `统计时间：${new Date(stat.updatedAt).toLocaleString()}` : '';
-            if (!stat.ok) {
+            if (!stat.ok || (stat.count === 0 && stat.error)) {
                 return `<span class="badge badge-error" title="${escapeHtml(title)}">获取失败</span>`;
             }
             return `<span class="badge${stat.count === 0 ? ' badge-error' : ''}" title="${escapeHtml(title)}">${stat.count} 个节点</span>`;

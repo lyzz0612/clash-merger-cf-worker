@@ -18,7 +18,12 @@ function parseSubscription(text) {
   let decoded = text.trim();
   if (!/:\/\//.test(decoded)) {
     const b64 = decoded.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
-    const bin = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
+    let bin;
+    try {
+      bin = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
+    } catch {
+      throw new Error('内容既不是 Clash YAML，也不是 base64 订阅');
+    }
     decoded = new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)));
   }
 
@@ -44,6 +49,7 @@ export class ProxyProvider {
     this.url = url;
     this.proxies = [];
     this.ok = false;
+    this.error = null;
   }
 
   /**
@@ -51,6 +57,8 @@ export class ProxyProvider {
    */
   async fetchProxies() {
     const startTime = Date.now();
+    let text = '';
+    const snippet = () => text.slice(0, 120).replace(/\s+/g, ' ').trim();
     try {
       console.log(JSON.stringify({
         level: 'INFO',
@@ -66,21 +74,27 @@ export class ProxyProvider {
       });
 
       if (!response.ok) {
+        text = await response.text().catch(() => '');
+        this.error = `HTTP ${response.status}${text ? '：' + snippet() : ''}`;
         console.error(JSON.stringify({
           level: 'ERROR',
           message: '获取订阅失败',
           provider: this.name,
           url: this.url,
           status: response.status,
+          body: snippet(),
           duration_ms: Date.now() - startTime
         }));
         return;
       }
 
-      const text = await response.text();
+      text = await response.text();
       const { format, proxies } = parseSubscription(text);
       this.proxies = proxies;
       this.ok = true;
+      if (proxies.length === 0) {
+        this.error = `未解析到节点：${snippet() || '响应为空'}`;
+      }
 
       console.log(JSON.stringify({
         level: 'INFO',
@@ -92,11 +106,13 @@ export class ProxyProvider {
       }));
 
     } catch (error) {
+      this.error = `${error.message}${text ? '：' + snippet() : ''}`;
       console.error(JSON.stringify({
         level: 'ERROR',
         message: '获取订阅异常',
         provider: this.name,
         error: error.message,
+        body: snippet(),
         duration_ms: Date.now() - startTime
       }));
     }
