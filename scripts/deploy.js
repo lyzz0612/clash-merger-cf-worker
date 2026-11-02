@@ -9,9 +9,11 @@ if (kvId) {
   writeFileSync('wrangler.toml', toml);
   console.log(`KV namespace ID set to: ${kvId}`);
 } else if (toml.includes('placeholder-kv-id')) {
-  toml = toml.replace(/\[\[kv_namespaces\]\]\r?\nbinding\s*=\s*"CLASH_KV"\r?\nid\s*=\s*"placeholder-kv-id"\r?\n\r?\n?/, '');
+  // 只去掉占位 id，保留 binding：wrangler 会继承线上已有的同名 KV 绑定（没有则自动创建），
+  // 不能整块删除，否则部署时会把 Dashboard 里的 CLASH_KV 绑定一起清掉
+  toml = toml.replace(/^id\s*=\s*"placeholder-kv-id"\r?\n/m, '');
   writeFileSync('wrangler.toml', toml);
-  console.log('KV placeholder removed, using dashboard bindings');
+  console.log('KV placeholder id removed, inheriting existing CLASH_KV binding');
 }
 
 execSync('npx wrangler deploy --keep-vars', { stdio: 'inherit' });
