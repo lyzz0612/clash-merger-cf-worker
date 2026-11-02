@@ -1,8 +1,5 @@
-import { ConfigLoader } from './config-loader.js';
-import { ProxyProvider } from './proxy-provider.js';
-import { ClashMerger } from './clash-merger.js';
-import { BASE_CONFIG } from './base-config.js';
 import { Logger } from './logger.js';
+import { getSubscription, refreshCache, getCacheStatus } from './subscription-cache.js';
 import { parseProxyUri } from './proxy-uri-parser.js';
 import loginHtml from './login.html';
 import adminHtml from './admin.html';
@@ -180,35 +177,57 @@ async function handleParseProxyUri(request, env, kv, logger) {
 }
 
 /**
- * 处理订阅请求
+ * 后台刷新订阅缓存（订阅或自定义代理变更后调用，不阻塞响应）
  */
-async function handleSubscription(token, env, kv, logger) {
-  logger.info('订阅请求', { token_prefix: token.substring(0, 8) + '...' });
-  await tokenCheck(token, env, kv);
+function scheduleCacheRefresh(ctx, kv, logger) {
+  ctx.waitUntil(
+    refreshCache(kv, logger).catch(err => {
+      logger.error('后台刷新订阅缓存失败', { error: err.message });
+    })
+  );
+}
 
-  // 加载配置
-  const configLoader = new ConfigLoader(kv);
-  await configLoader.loadSubs('SUBS');
-
-  const subs = configLoader.getSubs();
-  if (!subs || subs.length === 0) {
-    logger.error('未找到订阅配置');
-    throw new Error('未找到订阅配置');
+/**
+ * 处理获取缓存状态请求
+ */
+async function handleGetCacheStatus(request, env, kv, logger) {
+  const isAuthed = await verifyAuth(request, env, kv);
+  if (!isAuthed) {
+    logger.warn('获取缓存状态失败：未授权');
+    return jsonResponse({ error: '未授权' }, 401);
   }
 
-  logger.info('开始合并订阅', { sources: subs.length });
+  return jsonResponse(await getCacheStatus(kv));
+}
 
-  // 创建代理提供者
-  const providers = subs.map(sub => new ProxyProvider(sub.name, sub.url));
+/**
+ * 处理手动刷新订阅缓存请求
+ */
+async function handleRefresh(request, env, kv, logger) {
+  const isAuthed = await verifyAuth(request, env, kv);
+  if (!isAuthed) {
+    logger.warn('刷新订阅缓存失败：未授权');
+    return jsonResponse({ error: '未授权' }, 401);
+  }
 
-  // 合并配置
-  const merger = new ClashMerger(providers, BASE_CONFIG, kv);
-  await merger.merge();
+  logger.info('手动刷新订阅缓存');
+  const result = await refreshCache(kv, logger);
+  return jsonResponse({
+    success: result.refreshed,
+    message: result.refreshed ? '刷新成功' : '所有订阅源获取失败，已保留旧缓存',
+    updatedAt: result.updatedAt,
+    sources: result.sources,
+    succeeded: result.succeeded,
+  });
+}
 
-  logger.info('订阅合并完成');
-
-  // 返回 YAML
-  return merger.dump();
+/**
+ * 处理订阅请求：默认返回缓存，forceRefresh 时实时重新生成
+ */
+async function handleSubscription(token, env, kv, logger, forceRefresh) {
+  logger.info('订阅请求', { token_prefix: token.substring(0, 8) + '...', force_refresh: forceRefresh });
+  await tokenCheck(token, env, kv);
+  return await getSubscription(kv, logger, { forceRefresh });
 }
 
 /**
@@ -267,6 +286,7 @@ export default {
       // 路由: 更新订阅列表 API
       else if (path === '/api/subs' && method === 'PUT') {
         response = await handleUpdateSubs(request, env, env.CLASH_KV, logger);
+        if (response.ok) scheduleCacheRefresh(ctx, env.CLASH_KV, logger);
       }
       // 路由: 获取自定义代理列表 API
       else if (path === '/api/custom-proxies' && method === 'GET') {
@@ -275,6 +295,15 @@ export default {
       // 路由: 更新自定义代理列表 API
       else if (path === '/api/custom-proxies' && method === 'PUT') {
         response = await handleUpdateCustomProxies(request, env, env.CLASH_KV, logger);
+        if (response.ok) scheduleCacheRefresh(ctx, env.CLASH_KV, logger);
+      }
+      // 路由: 获取订阅缓存状态 API
+      else if (path === '/api/cache' && method === 'GET') {
+        response = await handleGetCacheStatus(request, env, env.CLASH_KV, logger);
+      }
+      // 路由: 手动刷新订阅缓存 API
+      else if (path === '/api/refresh' && method === 'POST') {
+        response = await handleRefresh(request, env, env.CLASH_KV, logger);
       }
       // 路由: 解析代理分享链接
       else if (path === '/api/parse-proxy-uri' && method === 'POST') {
@@ -285,14 +314,17 @@ export default {
         const match = path.match(/^\/subs\/([^\/]+)$/);
         if (match) {
           const token = match[1];
-          const yamlContent = await handleSubscription(token, env, env.CLASH_KV, logger);
+          const forceRefresh = ['1', 'true'].includes(url.searchParams.get('refresh'));
+          const result = await handleSubscription(token, env, env.CLASH_KV, logger, forceRefresh);
 
           // text/plain + inline：浏览器直接展示原始 YAML，避免被当作附件下载
-          response = new Response(yamlContent, {
+          response = new Response(result.yaml, {
             headers: {
               'Content-Type': 'text/plain; charset=utf-8',
               'Content-Disposition': 'inline',
               'Cache-Control': 'no-store',
+              'X-Cache': result.cache,
+              'X-Cache-Updated-At': result.updatedAt || '',
             },
           });
         } else {
@@ -319,5 +351,23 @@ export default {
 
       return new Response(`处理失败: ${error.message}`, { status: 500 });
     }
+  },
+
+  /**
+   * 定时任务入口：按 wrangler.toml 中的 crons 刷新订阅缓存
+   */
+  async scheduled(event, env, ctx) {
+    const logger = new Logger({
+      trigger: 'cron',
+      cron: event.cron,
+      scheduled_time: new Date(event.scheduledTime).toISOString()
+    });
+
+    logger.info('定时刷新订阅缓存');
+    ctx.waitUntil(
+      refreshCache(env.CLASH_KV, logger).catch(err => {
+        logger.error('定时刷新订阅缓存失败', { error: err.message, stack: err.stack });
+      })
+    );
   },
 };

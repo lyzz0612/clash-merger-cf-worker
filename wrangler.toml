@@ -6,6 +6,10 @@ compatibility_date = "2024-01-01"
 binding = "CLASH_KV"
 id = "placeholder-kv-id"
 
+# 定时刷新订阅缓存（UTC），默认每 6 小时一次
+[triggers]
+crons = ["0 */6 * * *"]
+
 [vars]
 # TOKEN = "your-secret-token"
 

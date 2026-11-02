@@ -46,6 +46,7 @@ deploy 脚本会自动将 KV ID 写入配置，无需手动修改 `wrangler.toml
 - ✅ **支持自定义代理服务器**（Hysteria2、VMess、Trojan 等）
 - ✅ **Web 管理界面**，可视化管理订阅和自定义代理
 - ✅ 自动创建代理组（AUTO 自动选择、PROXY 手动选择、Custom 自定义代理组）
+- ✅ **订阅缓存**：普通请求直接返回缓存，支持定时刷新和手动刷新
 - ✅ 基于 Loyalsoldier/clash-rules 的智能分流规则
 
 ## 项目结构
@@ -118,6 +119,19 @@ https://clash-merger-cf-worker.your-subdomain.workers.dev/subs/your-secret-token
 ```
 
 将此地址添加到你的 Clash 客户端即可。
+
+### 缓存与刷新
+
+合并结果缓存在 KV 的 `CACHE_YAML` 键中，普通 GET 请求直接返回缓存，不再实时拉取各订阅源。响应头 `X-Cache`（`HIT` / `MISS` / `REFRESH`）和 `X-Cache-Updated-At` 标明缓存状态。
+
+缓存在以下情况下更新：
+
+- **定时刷新**：由 `wrangler.toml` 中的 `[triggers] crons` 控制，默认每 6 小时一次（UTC），可按需修改
+- **手动刷新**：管理页「合并订阅地址」卡片中的「🔄 立即刷新」按钮，或在订阅地址后加 `?refresh=1`
+- **配置变更**：在管理页保存订阅列表或自定义代理后，后台自动刷新
+- **首次访问**：尚无缓存时实时生成并写入
+
+如果刷新时所有订阅源都获取失败，会保留旧缓存，避免客户端拿到空配置。
 
 ## 生成的配置说明
 

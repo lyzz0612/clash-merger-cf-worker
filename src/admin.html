@@ -366,6 +366,25 @@
         .btn-copy:hover, .btn-view:hover {
             opacity: 0.9;
         }
+
+        .btn-view:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .cache-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 16px;
+        }
+
+        .cache-status {
+            color: #666;
+            font-size: 13px;
+        }
     </style>
 </head>
 <body>
@@ -389,6 +408,10 @@
                 <input type="text" id="mergedSubUrl" readonly aria-label="合并后的订阅 URL">
                 <button type="button" class="btn-copy" onclick="copyMergedUrl()">复制地址</button>
                 <a href="#" id="mergedSubOpen" target="_blank" rel="noopener noreferrer" class="btn-view">在浏览器中查看</a>
+            </div>
+            <div class="cache-row">
+                <span id="cacheStatus" class="cache-status">缓存状态加载中...</span>
+                <button type="button" id="btnRefresh" class="btn-view" onclick="refreshSubscription()">🔄 立即刷新</button>
             </div>
         </div>
 
@@ -472,9 +495,71 @@
                 return;
             }
             updateMergedSubUrl();
+            loadCacheStatus();
             loadSubs();
             loadCustomProxies();
         });
+
+        function renderCacheStatus(status) {
+            const el = document.getElementById('cacheStatus');
+            if (!status.updatedAt) {
+                el.textContent = '暂无缓存，首次访问订阅地址时生成';
+                return;
+            }
+            let text = `缓存更新时间：${new Date(status.updatedAt).toLocaleString()}`;
+            if (status.sources != null) {
+                text += `（订阅源成功 ${status.succeeded}/${status.sources}）`;
+            }
+            el.textContent = text;
+        }
+
+        // 加载缓存状态
+        async function loadCacheStatus() {
+            try {
+                const token = sessionStorage.getItem('auth_token');
+                const response = await fetch('/api/cache', {
+                    headers: { 'Authorization': token }
+                });
+                if (!response.ok) {
+                    throw new Error('加载失败');
+                }
+                renderCacheStatus(await response.json());
+            } catch (error) {
+                document.getElementById('cacheStatus').textContent = '缓存状态加载失败';
+            }
+        }
+
+        // 手动刷新订阅缓存
+        async function refreshSubscription() {
+            const btn = document.getElementById('btnRefresh');
+            btn.disabled = true;
+            btn.textContent = '刷新中...';
+            try {
+                const token = sessionStorage.getItem('auth_token');
+                const response = await fetch('/api/refresh', {
+                    method: 'POST',
+                    headers: { 'Authorization': token }
+                });
+
+                if (response.status === 401) {
+                    window.location.href = '/login';
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(await response.text() || '刷新失败');
+                }
+
+                const data = await response.json();
+                renderCacheStatus(data);
+                showMessage(data.message, data.success ? 'success' : 'error');
+            } catch (error) {
+                showMessage('刷新失败：' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🔄 立即刷新';
+            }
+        }
 
         function updateMergedSubUrl() {
             const token = sessionStorage.getItem('auth_token');

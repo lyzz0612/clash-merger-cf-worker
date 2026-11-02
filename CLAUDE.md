@@ -53,7 +53,7 @@ wrangler kv:key get --binding=CLASH_KV "CUSTOM_PROXIES"
 
 Worker 提供以下路由：
 
-1. **订阅合并** - `/subs/<token>` - 返回合并后的 Clash 配置（YAML）
+1. **订阅合并** - `/subs/<token>` - 返回合并后的 Clash 配置（YAML），默认读缓存；`?refresh=1` 强制重新生成
 2. **Web 管理界面**：
    - `/` 或 `/login` - 登录页面
    - `/admin` - 管理页面（订阅和自定义代理管理）
@@ -63,7 +63,17 @@ Worker 提供以下路由：
    - `PUT /api/subs` - 更新订阅列表
    - `GET /api/custom-proxies` - 获取自定义代理列表
    - `PUT /api/custom-proxies` - 更新自定义代理列表
+   - `GET /api/cache` - 获取订阅缓存状态（更新时间、订阅源成功数）
+   - `POST /api/refresh` - 手动刷新订阅缓存
+   - 保存订阅列表或自定义代理后，通过 `ctx.waitUntil()` 在后台刷新缓存
 4. **健康检查** - `/health` - 返回服务状态
+5. **定时任务** - `scheduled()` 按 `wrangler.toml` 的 `[triggers] crons` 刷新缓存
+
+### 订阅缓存 (`src/subscription-cache.js`)
+
+- 合并结果存于 KV 键 `CACHE_YAML`，metadata 记录 `updatedAt`、`sources`、`succeeded`
+- `getSubscription()`：有缓存直接返回（`X-Cache: HIT`），无缓存实时生成并写入（`MISS`），强制刷新为 `REFRESH`
+- `refreshCache()`：重新合并并写缓存；若所有订阅源都失败且已有缓存，则保留旧缓存
 
 ### 数据流程（订阅合并）
 
@@ -146,6 +156,11 @@ ClashMerger 按以下顺序生成代理组：
   ]
   ```
 - **管理方式**: 推荐通过 Web 管理界面添加，也可通过命令行设置
+
+### CACHE_YAML (字符串)
+- **键名**: `CACHE_YAML`
+- **用途**: 缓存合并后的 Clash YAML，由程序自动维护，无需手动设置
+- **metadata**: `{ updatedAt, sources, succeeded }`
 
 ## 重要配置文件
 
