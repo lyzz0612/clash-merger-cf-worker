@@ -125,8 +125,10 @@
 
         .sub-item-header {
             display: flex;
+            flex-wrap: wrap;
             justify-content: space-between;
             align-items: center;
+            gap: 10px;
             margin-bottom: 10px;
         }
 
@@ -138,7 +140,12 @@
 
         .sub-item-actions {
             display: flex;
+            flex-shrink: 0;
             gap: 10px;
+        }
+
+        .sub-item-actions button {
+            white-space: nowrap;
         }
 
         .btn-edit, .btn-delete {
@@ -160,8 +167,58 @@
             color: white;
         }
 
-        .btn-edit:hover, .btn-delete:hover {
+        .btn-edit:hover, .btn-delete:hover, .btn-toggle:hover {
             opacity: 0.8;
+        }
+
+        .sub-item-title {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .sub-item.disabled {
+            background: #fafafa;
+        }
+
+        .sub-item.disabled .sub-item-name,
+        .sub-item.disabled .sub-item-url {
+            color: #aaa;
+        }
+
+        .badge {
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            background: #e8eaf6;
+            color: #3949ab;
+            white-space: nowrap;
+        }
+
+        .badge-error {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .badge-off {
+            background: #eeeeee;
+            color: #757575;
+        }
+
+        .btn-toggle {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: opacity 0.3s;
+            background: #ff9800;
+            color: white;
+        }
+
+        .btn-toggle.off {
+            background: #2196f3;
         }
 
         .sub-item-url {
@@ -483,6 +540,7 @@
 
     <script>
         let subs = [];
+        let subStats = {};
         let editingIndex = -1;
         let customProxies = [];
         let editingCustomProxyIndex = -1;
@@ -553,6 +611,7 @@
                 const data = await response.json();
                 renderCacheStatus(data);
                 showMessage(data.message, data.success ? 'success' : 'error');
+                loadSubs();
             } catch (error) {
                 showMessage('刷新失败：' + error.message, 'error');
             } finally {
@@ -618,6 +677,7 @@
 
                 const data = await response.json();
                 subs = data.subs || [];
+                subStats = data.stats || {};
                 renderSubs();
             } catch (error) {
                 showMessage('加载订阅列表失败：' + error.message, 'error');
@@ -638,18 +698,45 @@
                 return;
             }
 
-            subList.innerHTML = subs.map((sub, index) => `
-                <div class="sub-item">
+            subList.innerHTML = subs.map((sub, index) => {
+                const enabled = sub.enabled !== false;
+                return `
+                <div class="sub-item${enabled ? '' : ' disabled'}">
                     <div class="sub-item-header">
-                        <div class="sub-item-name">${escapeHtml(sub.name)}</div>
+                        <div class="sub-item-title">
+                            <div class="sub-item-name">${escapeHtml(sub.name)}</div>
+                            ${renderNodeBadge(sub)}
+                            ${enabled ? '' : '<span class="badge badge-off">已禁用</span>'}
+                        </div>
                         <div class="sub-item-actions">
+                            <button class="btn-toggle${enabled ? '' : ' off'}" onclick="toggleSub(${index})">${enabled ? '禁用' : '启用'}</button>
                             <button class="btn-edit" onclick="openEditModal(${index})">编辑</button>
                             <button class="btn-delete" onclick="deleteSub(${index})">删除</button>
                         </div>
                     </div>
                     <div class="sub-item-url">${escapeHtml(sub.url)}</div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
+        }
+
+        // 节点数标签：来自最近一次刷新的统计
+        function renderNodeBadge(sub) {
+            const stat = subStats[sub.url];
+            if (!stat) {
+                return '<span class="badge">节点数未知</span>';
+            }
+            const title = stat.updatedAt ? `统计时间：${new Date(stat.updatedAt).toLocaleString()}` : '';
+            if (!stat.ok) {
+                return `<span class="badge badge-error" title="${escapeHtml(title)}">获取失败</span>`;
+            }
+            return `<span class="badge${stat.count === 0 ? ' badge-error' : ''}" title="${escapeHtml(title)}">${stat.count} 个节点</span>`;
+        }
+
+        // 启用/禁用订阅：保存后后台会刷新合并订阅
+        async function toggleSub(index) {
+            subs[index].enabled = subs[index].enabled === false;
+            await saveSubs();
         }
 
         // 打开添加模态框
@@ -686,8 +773,8 @@
                 // 添加新订阅
                 subs.push({ name, url });
             } else {
-                // 编辑现有订阅
-                subs[editingIndex] = { name, url };
+                // 编辑现有订阅（保留 enabled 等其他字段）
+                subs[editingIndex] = { ...subs[editingIndex], name, url };
             }
 
             await saveSubs();

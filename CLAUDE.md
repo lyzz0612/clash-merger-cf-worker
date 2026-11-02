@@ -59,7 +59,7 @@ Worker 提供以下路由：
    - `/admin` - 管理页面（订阅和自定义代理管理）
 3. **管理 API**：
    - `POST /api/login` - 登录验证
-   - `GET /api/subs` - 获取订阅列表
+   - `GET /api/subs` - 获取订阅列表（附带 `stats` 节点统计）
    - `PUT /api/subs` - 更新订阅列表
    - `GET /api/custom-proxies` - 获取自定义代理列表
    - `PUT /api/custom-proxies` - 更新自定义代理列表
@@ -133,7 +133,8 @@ ClashMerger 按以下顺序生成代理组：
 ### SUBS (JSON 数组)
 - **键名**: `SUBS`
 - **格式**: JSON 字符串数组
-- **结构**: `[{"name": "订阅名", "url": "订阅URL"}, ...]`
+- **结构**: `[{"name": "订阅名", "url": "订阅URL", "enabled": false}, ...]`
+- **enabled**: 可选，未设置视为启用；为 `false` 时合并订阅不拉取、不包含该订阅源
 - **示例文件**: `subs.example.json`
 
 ### CUSTOM_PROXIES (JSON 数组)
@@ -161,6 +162,12 @@ ClashMerger 按以下顺序生成代理组：
 - **键名**: `CACHE_YAML`
 - **用途**: 缓存合并后的 Clash YAML，由程序自动维护，无需手动设置
 - **metadata**: `{ updatedAt, sources, succeeded }`
+
+### SUB_STATS (JSON 对象)
+- **键名**: `SUB_STATS`
+- **用途**: 各订阅源最近一次刷新的节点统计，由程序自动维护，管理页据此显示节点数
+- **结构**: `{ "订阅URL": { "count": 49, "ok": true, "updatedAt": "ISO 时间" }, ... }`
+- 禁用的订阅源保留上次统计，已删除的订阅源在下次刷新时移除
 
 ## 重要配置文件
 

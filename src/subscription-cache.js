@@ -4,9 +4,25 @@ import { ClashMerger } from './clash-merger.js';
 import { BASE_CONFIG } from './base-config.js';
 
 const CACHE_KEY = 'CACHE_YAML';
+const STATS_KEY = 'SUB_STATS';
 
 /**
- * 实时获取所有订阅源并合并，返回 YAML 与统计信息
+ * 订阅是否启用（未设置 enabled 视为启用）
+ */
+export function isSubEnabled(sub) {
+  return sub.enabled !== false;
+}
+
+/**
+ * 读取各订阅源的节点统计，结构：{ [url]: { count, ok, updatedAt } }
+ */
+export async function getSubStats(kv) {
+  const json = await kv.get(STATS_KEY);
+  return json ? JSON.parse(json) : {};
+}
+
+/**
+ * 实时获取所有启用的订阅源并合并，返回 YAML 与统计信息
  */
 async function buildSubscription(kv, logger) {
   const configLoader = new ConfigLoader(kv);
@@ -18,16 +34,28 @@ async function buildSubscription(kv, logger) {
     throw new Error('未找到订阅配置');
   }
 
-  logger.info('开始合并订阅', { sources: subs.length });
+  const enabledSubs = subs.filter(isSubEnabled);
+  logger.info('开始合并订阅', { sources: subs.length, enabled: enabledSubs.length });
 
-  const providers = subs.map(sub => new ProxyProvider(sub.name, sub.url));
+  const providers = enabledSubs.map(sub => new ProxyProvider(sub.name, sub.url));
   const merger = new ClashMerger(providers, BASE_CONFIG, kv);
   await merger.merge();
 
   const succeeded = providers.filter(p => p.getProxies().length > 0).length;
-  logger.info('订阅合并完成', { sources: subs.length, succeeded });
+  logger.info('订阅合并完成', { sources: enabledSubs.length, succeeded });
 
-  return { yaml: merger.dump(), sources: subs.length, succeeded };
+  // 记录本次拉取的节点数；禁用的订阅源保留上次的统计，已删除的订阅源丢弃
+  const updatedAt = new Date().toISOString();
+  const oldStats = await getSubStats(kv);
+  const stats = {};
+  for (const sub of subs) {
+    if (oldStats[sub.url]) stats[sub.url] = oldStats[sub.url];
+  }
+  for (const provider of providers) {
+    stats[provider.url] = { count: provider.getProxies().length, ok: provider.ok, updatedAt };
+  }
+
+  return { yaml: merger.dump(), sources: enabledSubs.length, succeeded, stats };
 }
 
 /**
@@ -38,7 +66,11 @@ export async function refreshCache(kv, logger) {
   const result = await buildSubscription(kv, logger);
   const updatedAt = new Date().toISOString();
 
-  if (result.succeeded === 0) {
+  // 节点统计无论成败都记录，便于管理页显示失败的订阅源
+  await kv.put(STATS_KEY, JSON.stringify(result.stats));
+
+  // 仅在有启用的订阅源但全部失败时保留旧缓存；全部禁用时应输出不含订阅节点的新配置
+  if (result.sources > 0 && result.succeeded === 0) {
     const old = await kv.getWithMetadata(CACHE_KEY);
     if (old.value) {
       logger.warn('所有订阅源获取失败，保留旧缓存', { cached_at: old.metadata?.updatedAt });

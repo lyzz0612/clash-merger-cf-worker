@@ -1,5 +1,5 @@
 import { Logger } from './logger.js';
-import { getSubscription, refreshCache, getCacheStatus } from './subscription-cache.js';
+import { getSubscription, refreshCache, getCacheStatus, getSubStats } from './subscription-cache.js';
 import { parseProxyUri } from './proxy-uri-parser.js';
 import loginHtml from './login.html';
 import adminHtml from './admin.html';
@@ -92,9 +92,10 @@ async function handleGetSubs(request, env, kv, logger) {
 
   const subsJson = await kv.get('SUBS');
   const subs = subsJson ? JSON.parse(subsJson) : [];
+  const stats = await getSubStats(kv);
 
   logger.info('获取订阅列表成功', { count: subs.length });
-  return jsonResponse({ subs });
+  return jsonResponse({ subs, stats });
 }
 
 /**

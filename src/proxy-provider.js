@@ -43,6 +43,7 @@ export class ProxyProvider {
     this.name = name;
     this.url = url;
     this.proxies = [];
+    this.ok = false;
   }
 
   /**
@@ -79,6 +80,7 @@ export class ProxyProvider {
       const text = await response.text();
       const { format, proxies } = parseSubscription(text);
       this.proxies = proxies;
+      this.ok = true;
 
       console.log(JSON.stringify({
         level: 'INFO',
